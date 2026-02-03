@@ -1,0 +1,53 @@
+---
+# ============================================================================
+# PLAYBOOK: High Memory Auto-Remediation
+# PURPOSE: Automatically remediate high memory conditions by restarting
+#          memory-intensive services and clearing system cache
+# TRIGGER: Dynatrace alert via Webhook Server
+# ============================================================================
+- name: Remediate High Memory Usage
+  hosts: all
+  gather_facts: false
+  become: true
+
+  vars:
+    # Variables from Dynatrace webhook
+    problem_id: "{{ problem_id | default('UNKNOWN') }}"
+    problem_title: "{{ problem_title | default('Manual Memory Remediation') }}"
+    affected_entity: "{{ affected_entity | default(inventory_hostname) }}"
+    severity: "{{ severity | default('UNKNOWN') }}"
+
+    # Remediation configuration
+    memory_threshold_percent: 85
+    target_service: rsyslog
+
+  tasks:
+    - name: Display playbook start banner
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════════════
+          HIGH MEMORY AUTO-REMEDIATION PLAYBOOK
+          ════════════════════════════════════════════════════════════════
+          Problem ID:    {{ problem_id }}
+          Title:         {{ problem_title }}
+          Target Host:   {{ inventory_hostname }}
+          Severity:      {{ severity }}
+          Service:       {{ target_service }}
+          Threshold:     {{ memory_threshold_percent }}%
+          ════════════════════════════════════════════════════════════════
+
+    - name: Execute memory remediation role
+      ansible.builtin.include_role:
+        name: memory_remediation
+      vars:
+        memory_threshold_percent: "{{ memory_threshold_percent }}"
+        target_service: "{{ target_service }}"
+        send_remediation_report: true
+
+    - name: Playbook completion message
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════════════
+          ✅ REMEDIATION PLAYBOOK COMPLETED
+          ════════════════════════════════════════════════════════════════
+          Check logs for detailed results

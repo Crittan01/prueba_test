@@ -1,0 +1,79 @@
+---
+# ============================================================================
+# MEMORY ANALYSIS: Análisis detallado del uso de memoria
+# ============================================================================
+
+- name: Get current memory usage (free command)
+  ansible.builtin.command: free -m
+  register: free_output
+  changed_when: false
+
+- name: Display memory info
+  ansible.builtin.debug:
+    var: free_output.stdout_lines
+
+- name: Calculate memory percentage
+  ansible.builtin.shell: |
+    set -o pipefail
+    free | grep Mem | awk '{printf "%.0f", ($3/$2) * 100}'
+  args:
+    executable: /bin/bash
+  register: memory_calc
+  changed_when: false
+
+- name: Set current memory percentage fact
+  ansible.builtin.set_fact:
+    current_memory_percent: "{{ memory_calc.stdout }}"
+
+- name: Display current memory percentage
+  ansible.builtin.debug:
+    msg: "Current memory usage: {{ current_memory_percent }}%"
+
+- name: Get top 10 memory consuming processes
+  ansible.builtin.shell: |
+    set -o pipefail
+    ps aux --sort=-%mem | head -n 11
+  args:
+    executable: /bin/bash
+  register: top_memory_processes
+  changed_when: false
+
+- name: Display top memory consumers
+  ansible.builtin.debug:
+    msg: "{{ top_memory_processes.stdout_lines }}"
+
+- name: Check if target service is in top consumers
+  ansible.builtin.shell: |
+    set -o pipefail
+    ps aux --sort=-%mem | head -n 20 | grep -i {{ target_service }} | wc -l
+  args:
+    executable: /bin/bash
+  register: service_in_top
+  changed_when: false
+
+- name: Get memory usage of target service
+  ansible.builtin.shell: |
+    set -o pipefail
+    ps aux | grep -i {{ target_service }} | grep -v grep | awk '{sum+=$6} END {print sum/1024}'
+  args:
+    executable: /bin/bash
+  register: service_memory_mb
+  changed_when: false
+  failed_when: false
+
+- name: Display service memory consumption
+  ansible.builtin.debug:
+    msg: "{{ target_service }} is consuming approximately {{ service_memory_mb.stdout | default('0') }} MB"
+
+- name: Get detailed memory breakdown
+  ansible.builtin.command: cat /proc/meminfo
+  register: meminfo_output
+  changed_when: false
+
+- name: Parse key memory metrics
+  ansible.builtin.set_fact:
+    mem_total: "{{ meminfo_output.stdout | regex_search('MemTotal:\\s+(\\d+)', '\\1') | first }}"
+    mem_free: "{{ meminfo_output.stdout | regex_search('MemFree:\\s+(\\d+)', '\\1') | first }}"
+    mem_available: "{{ meminfo_output.stdout | regex_search('MemAvailable:\\s+(\\d+)', '\\1') | first }}"
+    buffers: "{{ meminfo_output.stdout | regex_search('Buffers:\\s+(\\d+)', '\\1') | first }}"
+    cached: "{{ meminfo_output.stdout | regex_search('Cached:\\s+(\\d+)', '\\1') | first }}"

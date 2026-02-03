@@ -1,0 +1,27 @@
+---
+# defaults file for roles/memory_remediation
+
+# Umbrales de memoria
+memory_threshold_percent: 85
+memory_critical_percent: 95
+
+# Servicio a reiniciar
+target_service: rsyslog
+service_description: "System Logging Service"
+
+# Paths de logs
+log_backup_dir: /var/log/backup
+rsyslog_log_dir: /var/log
+
+# Timeouts
+service_stop_timeout: 30
+service_start_timeout: 60
+
+# Opciones de limpieza
+clear_system_cache: true
+clear_page_cache: true
+clear_dentries_inodes: true
+
+# Reporting
+send_remediation_report: true
+report_webhook_url: "http://192.168.20.180:5000/remediation/callback"

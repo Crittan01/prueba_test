@@ -1,0 +1,36 @@
+---
+# ============================================================================
+# PRE-CHECKS: Validaciones previas a la remediación
+# ============================================================================
+
+- name: Gather system facts
+  ansible.builtin.setup:
+    gather_subset:
+      - hardware
+      - network
+      - virtual
+
+- name: Get current timestamp
+  ansible.builtin.set_fact:
+    remediation_start_time: "{{ ansible_date_time.iso8601 }}"
+    remediation_start_epoch: "{{ ansible_date_time.epoch }}"
+
+- name: Verify target service exists
+  ansible.builtin.systemd:
+    name: "{{ target_service }}"
+  register: service_check
+  failed_when: false
+  changed_when: false
+
+- name: Fail if service does not exist
+  ansible.builtin.fail:
+    msg: "Service {{ target_service }} does not exist on this system"
+  when: service_check.status is not defined
+
+- name: Display service status
+  ansible.builtin.debug:
+    msg: |
+      Service: {{ target_service }}
+      State: {{ service_check.status.ActiveState | default('unknown') }}
+      Status: {{ service_check.status.SubState | default('unknown') }}
+      PID: {{ service_check.status.MainPID | default('N/A') }}

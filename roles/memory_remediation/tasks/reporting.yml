@@ -1,0 +1,46 @@
+---
+# ============================================================================
+# REPORTING: Envío de resultados a webhook/sistema externo
+# ============================================================================
+
+- name: Prepare remediation report
+  ansible.builtin.set_fact:
+    remediation_report:
+      problem_id: "{{ problem_id | default('MANUAL-RUN') }}"
+      hostname: "{{ inventory_hostname }}"
+      timestamp_start: "{{ remediation_start_time }}"
+      timestamp_end: "{{ remediation_end_time }}"
+      service: "{{ target_service }}"
+      memory_before: "{{ current_memory_percent }}"
+      memory_after: "{{ post_memory_percent }}"
+      memory_reduction: "{{ memory_reduction }}"
+      status: "{{ 'success' if remediation_successful else 'partial' }}"
+      service_status: "{{ final_service_check.status.ActiveState }}"
+
+- name: Display report summary
+  ansible.builtin.debug:
+    msg: "{{ remediation_report | to_nice_json }}"
+
+- name: Send report to webhook (if configured)
+  ansible.builtin.uri:
+    url: "{{ report_webhook_url }}"
+    method: POST
+    body_format: json
+    body: "{{ remediation_report }}"
+    headers:
+      Content-Type: "application/json"
+    status_code: [200, 201]
+    timeout: 10
+  delegate_to: localhost
+  when:
+    - report_webhook_url is defined
+    - report_webhook_url != ""
+  ignore_errors: true
+  register: webhook_response
+
+- name: Log report locally
+  ansible.builtin.copy:
+    content: "{{ remediation_report | to_nice_json }}"
+    dest: "/var/log/ansible_remediation_{{ problem_id | default('manual') }}_{{ ansible_date_time.epoch }}.json"
+    mode: "0644"
+  ignore_errors: true

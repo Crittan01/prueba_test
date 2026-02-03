@@ -1,0 +1,40 @@
+---
+# tasks file for roles/memory_remediation
+# ============================================================================
+# ROLE: memory_remediation
+# DESCRIPTION: Automated memory remediation through service restart
+# ============================================================================
+
+- name: Display remediation banner
+  ansible.builtin.debug:
+    msg: |
+      ╔══════════════════════════════════════════════════════════════╗
+      ║           MEMORY REMEDIATION PLAYBOOK                        ║
+      ║                                                              ║
+      ║  Problem ID: {{ problem_id | default('MANUAL-RUN') }}
+      ║  Target: {{ inventory_hostname }}
+      ║  Service: {{ target_service }}
+      ║  Threshold: {{ memory_threshold_percent }}%
+      ╚══════════════════════════════════════════════════════════════╝
+
+- name: Include pre-checks
+  ansible.builtin.include_tasks:
+    file: pre_checks.yml
+
+- name: Include memory analysis
+  ansible.builtin.include_tasks:
+    file: memory_analysis.yml
+
+- name: Include service remediation
+  ansible.builtin.include_tasks:
+    file: service_remediation.yml
+  when: current_memory_percent | int > memory_threshold_percent | int
+
+- name: Include post-checks
+  ansible.builtin.include_tasks:
+    file: post_checks.yml
+
+- name: Include reporting
+  ansible.builtin.include_tasks:
+    file: reporting.yml
+  when: send_remediation_report | bool

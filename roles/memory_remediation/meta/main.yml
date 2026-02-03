@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  role_name: memory_remediation
+  author: Cristian - NTT Data
+  description: Automated memory remediation through service restart
+  company: NTT Data
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - 8
+        - 9
+    - name: OracleLinux
+      versions:
+        - 8
+        - 9
+  galaxy_tags:
+    - automation
+    - remediation
+    - memory
+    - dynatrace
+    - event_driven
+
+dependencies: []

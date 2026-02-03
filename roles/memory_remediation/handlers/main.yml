@@ -1,0 +1,6 @@
+---
+# handlers file for roles/memory_remediation
+
+- name: Service restarted
+  ansible.builtin.debug:
+    msg: "Service {{ target_service }} has been restarted"
