@@ -6,10 +6,10 @@
 
   vars:
     # Variables del problema (vienen del webhook)
-    problem_id: "{{ problem_id | default('MANUAL-RUN') }}"
-    problem_title: "{{ problem_title | default('Manual Execution') }}"
-    affected_entity: "{{ affected_entity | default(inventory_hostname) }}"
-    severity: "{{ severity | default('UNKNOWN') }}"
+    problem_id: "{{ webhook_problem_id | default('MANUAL-RUN') }}"
+    problem_title: "{{ webhook_problem_title | default('Manual Execution') }}"
+    affected_entity: "{{ webhook_affected_entity | default(inventory_hostname) }}"
+    severity: "{{ webhook_severity | default('UNKNOWN') }}"
 
     # Configuración de remediación
     memory_threshold: 25
