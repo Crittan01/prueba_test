@@ -1,0 +1,2 @@
+[linux_produccion]
+oracle-db01 ansible_host=192.168.20.180

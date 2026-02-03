@@ -1,53 +1,147 @@
 ---
-# ============================================================================
-# PLAYBOOK: High Memory Auto-Remediation
-# PURPOSE: Automatically remediate high memory conditions by restarting
-#          memory-intensive services and clearing system cache
-# TRIGGER: Dynatrace alert via Webhook Server
-# ============================================================================
 - name: Remediate High Memory Usage
   hosts: all
-  gather_facts: false
+  gather_facts: true
   become: true
 
   vars:
-    # Variables from Dynatrace webhook
-    problem_id: "{{ problem_id | default('UNKNOWN') }}"
-    problem_title: "{{ problem_title | default('Manual Memory Remediation') }}"
+    # Variables del problema (vienen del webhook)
+    problem_id: "{{ problem_id | default('MANUAL-RUN') }}"
+    problem_title: "{{ problem_title | default('Manual Execution') }}"
     affected_entity: "{{ affected_entity | default(inventory_hostname) }}"
     severity: "{{ severity | default('UNKNOWN') }}"
 
-    # Remediation configuration
-    memory_threshold_percent: 85
-    target_service: rsyslog
+    # Configuración de remediación
+    memory_threshold: 25
+    service_to_restart: crond # Servicio básico no crítico
 
   tasks:
-    - name: Display playbook start banner
-      ansible.builtin.debug:
-        msg: |
-          ════════════════════════════════════════════════════════════════
-          HIGH MEMORY AUTO-REMEDIATION PLAYBOOK
-          ════════════════════════════════════════════════════════════════
-          Problem ID:    {{ problem_id }}
-          Title:         {{ problem_title }}
-          Target Host:   {{ inventory_hostname }}
-          Severity:      {{ severity }}
-          Service:       {{ target_service }}
-          Threshold:     {{ memory_threshold_percent }}%
-          ════════════════════════════════════════════════════════════════
+    # ============================================
+    # FASE 1: INFORMACIÓN Y DIAGNÓSTICO
+    # ============================================
 
-    - name: Execute memory remediation role
-      ansible.builtin.include_role:
-        name: memory_remediation
-      vars:
-        memory_threshold_percent: "{{ memory_threshold_percent }}"
-        target_service: "{{ target_service }}"
-        send_remediation_report: true
-
-    - name: Playbook completion message
+    - name: Display remediation information
       ansible.builtin.debug:
-        msg: |
-          ════════════════════════════════════════════════════════════════
-          ✅ REMEDIATION PLAYBOOK COMPLETED
-          ════════════════════════════════════════════════════════════════
-          Check logs for detailed results
+        msg:
+          - "========================================"
+          - "MEMORY REMEDIATION STARTED"
+          - "========================================"
+          - "Problem ID: {{ problem_id }}"
+          - "Title: {{ problem_title }}"
+          - "Target: {{ affected_entity }}"
+          - "Severity: {{ severity }}"
+          - "========================================"
+
+    - name: Get current memory usage (percentage)
+      ansible.builtin.shell:
+        cmd: free | grep Mem | awk '{printf("%.0f", ($3/$2) * 100)}'
+      register: memory_before
+      changed_when: false
+
+    - name: Display current memory usage
+      ansible.builtin.debug:
+        msg: "Current memory usage: {{ memory_before.stdout }}%"
+
+    - name: Get top memory consuming processes
+      ansible.builtin.shell:
+        cmd: ps aux --sort=-%mem | head -n 6
+      register: top_processes
+      changed_when: false
+
+    - name: Show top memory processes
+      ansible.builtin.debug:
+        msg: "{{ top_processes.stdout_lines }}"
+
+    # ============================================
+    # FASE 2: REMEDIACIÓN - REINICIAR SERVICIO
+    # ============================================
+
+    - name: Check if service exists
+      ansible.builtin.systemd:
+        name: "{{ service_to_restart }}"
+      register: service_check
+      failed_when: false
+
+    - name: Restart service to free memory
+      ansible.builtin.systemd:
+        name: "{{ service_to_restart }}"
+        state: restarted
+        enabled: true
+      when:
+        - memory_before.stdout | int > memory_threshold
+        - service_check.status is defined
+      register: service_restart
+
+    - name: Wait for service to stabilize
+      ansible.builtin.pause:
+        seconds: 5
+      when: service_restart.changed
+
+    - name: Verify service is running
+      ansible.builtin.systemd:
+        name: "{{ service_to_restart }}"
+        state: started
+      register: service_status
+      when: service_restart.changed
+
+    # ============================================
+    # FASE 3: LIMPIEZA ADICIONAL
+    # ============================================
+
+    - name: Clear system page cache (safe operation)
+      ansible.builtin.shell:
+        cmd: sync && echo 1 > /proc/sys/vm/drop_caches
+      when: memory_before.stdout | int > 90
+      changed_when: true
+
+    # ============================================
+    # FASE 4: VERIFICACIÓN POST-REMEDIACIÓN
+    # ============================================
+
+    - name: Wait 10 seconds for memory to stabilize
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Get post-remediation memory usage
+      ansible.builtin.shell:
+        cmd: free | grep Mem | awk '{printf("%.0f", ($3/$2) * 100)}'
+      register: memory_after
+      changed_when: false
+
+    - name: Calculate memory difference
+      ansible.builtin.set_fact:
+        memory_freed: "{{ (memory_before.stdout | int) - (memory_after.stdout | int) }}"
+
+    - name: Display remediation results
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "REMEDIATION COMPLETED"
+          - "========================================"
+          - "Memory Before: {{ memory_before.stdout }}%"
+          - "Memory After: {{ memory_after.stdout }}%"
+          - "Memory Freed: {{ memory_freed }}%"
+          - "Service Restarted: {{ service_to_restart }}"
+          - "Status: {{ 'SUCCESS' if service_status is defined else 'NO ACTION NEEDED' }}"
+          - "========================================"
+
+    # ============================================
+    # FASE 5: REPORTE FINAL
+    # ============================================
+
+    - name: Create remediation summary
+      ansible.builtin.set_fact:
+        remediation_summary:
+          problem_id: "{{ problem_id }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          target_host: "{{ inventory_hostname }}"
+          memory_before: "{{ memory_before.stdout }}"
+          memory_after: "{{ memory_after.stdout }}"
+          memory_freed: "{{ memory_freed }}"
+          service_restarted: "{{ service_to_restart }}"
+          action_taken: "{{ 'Service restart + cache clear' if memory_before.stdout | int > 90 else 'Service restart only' }}"
+          result: "{{ 'SUCCESS' if memory_after.stdout | int < memory_before.stdout | int else 'NO IMPROVEMENT' }}"
+
+    - name: Display final summary
+      ansible.builtin.debug:
+        var: remediation_summary
