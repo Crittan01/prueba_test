@@ -34,7 +34,9 @@
 
     - name: Get current memory usage (percentage)
       ansible.builtin.shell:
-        cmd: free | grep Mem | awk '{printf("%.0f", ($3/$2) * 100)}'
+        cmd: |
+          set -o pipefail
+          free | grep Mem | awk '{printf("%.0f", ($3/$2) * 100)}'
       register: memory_before
       changed_when: false
 
@@ -44,7 +46,9 @@
 
     - name: Get top memory consuming processes
       ansible.builtin.shell:
-        cmd: ps aux --sort=-%mem | head -n 6
+        cmd: |
+          set -o pipefail
+          ps aux --sort=-%mem | head -n 6
       register: top_processes
       changed_when: false
 
@@ -72,18 +76,6 @@
         - service_check.status is defined
       register: service_restart
 
-    - name: Wait for service to stabilize
-      ansible.builtin.pause:
-        seconds: 5
-      when: service_restart.changed
-
-    - name: Verify service is running
-      ansible.builtin.systemd:
-        name: "{{ service_to_restart }}"
-        state: started
-      register: service_status
-      when: service_restart.changed
-
     # ============================================
     # FASE 3: LIMPIEZA ADICIONAL
     # ============================================
@@ -104,7 +96,9 @@
 
     - name: Get post-remediation memory usage
       ansible.builtin.shell:
-        cmd: free | grep Mem | awk '{printf("%.0f", ($3/$2) * 100)}'
+        cmd: |
+          set -o pipefail
+          free | grep Mem | awk '{printf("%.0f", ($3/$2) * 100)}'
       register: memory_after
       changed_when: false
 
@@ -145,3 +139,16 @@
     - name: Display final summary
       ansible.builtin.debug:
         var: remediation_summary
+
+  handlers:
+    - name: Wait for service to stabilize
+      ansible.builtin.pause:
+        seconds: 5
+      when: service_restart.changed
+
+    - name: Verify service is running
+      ansible.builtin.systemd:
+        name: "{{ service_to_restart }}"
+        state: started
+      register: service_status
+      when: service_restart.changed
